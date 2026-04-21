@@ -1,5 +1,6 @@
 import os 
 from celery import Celery
+from app.rag.processor import extract_and_chunk_pdf
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
 
@@ -11,6 +12,26 @@ celery_app = Celery(
 
 @celery_app.task
 def process_pdf_task(file_name: str):
-    # We will add LangGraph, text chunking, and Qdrant embedding here later!
-    print(f"--- FAKE AI TASK: Processing {file_name} ---")
-    return {"status": "success", "file": file_name, "message": "Document embedded into vector DB!"}
+    print(f"--- STARTING AI TASK: Processing {file_name} ---")
+
+    try:
+        # Read and chunk the PDF
+        chunks = extract_and_chunk_pdf(file_name)
+        
+        # in next phase we weill qdrant emmbadin code here !!
+
+        print(f"--- COMPLETED AI TASK: Processed {file_name} ---")
+        return {
+            "status": "success",
+            "file": file_name,
+            "chunks_created": len(chunks),
+            "message": f"Successfully processed {file_name} and created {len(chunks)} chunks."
+        }
+    except Exception as e:
+        print(f"--- ERROR in AI TASK: Failed to process {file_name} ---")
+        print(f"Error details: {str(e)}")
+        return {
+            "status": "error",
+            "file": file_name,
+            "message": f"Failed to process {file_name}. Error: {str(e)}"
+        }

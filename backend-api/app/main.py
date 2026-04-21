@@ -1,9 +1,14 @@
-from fastapi import FastAPI
-from fastapi.concurrency import asynccontextmanager
-from  app.worker import process_pdf_task
+import os
+import shutil
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from app.worker import process_pdf_task
 from app.core.vector_db import init_db
 
-# The lifespan context manager runs code before the server starts accepting requests
+# Ensure the shared uploads folder exists when the server starts
+UPLOAD_DIR = "/code/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("--- Server Starting Up: Initializing Database ---")
@@ -11,19 +16,29 @@ async def lifespan(app: FastAPI):
     yield
     print("--- Server Shutting Down ---")
 
-app = FastAPI(title="Enhanced RAG API", version="0.1.1")
+app = FastAPI(title="Enhanced RAG API", version="0.1.1", lifespan=lifespan)
 
 @app.get("/")
 async def read_root(): 
     return {"status": "success", "message": "Welcome to the Enhanced RAG API!"}
 
+# NEW: We use UploadFile to accept real binary files
 @app.post("/upload")
-def upload_document(filename: str):
-    # The .delay() method is Celery's magic command to send the task to Redis
-    task = process_pdf_task.delay(filename)
+async def upload_document(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    
+    # Save the file to the shared folder
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Tell the worker exactly where the file is located
+    task = process_pdf_task.delay(file_path)
     
     return {
-        "message": "File received. Processing in the background!",
-        "filename": filename,
+        "message": "File received and saved. Processing in the background!",
+        "filename": file.filename,
         "task_id": task.id
     }

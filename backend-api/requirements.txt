@@ -7,3 +7,5 @@ fastembed
 pypdf
 langchain
 langchain-community
+langchain-text-splitters
+python-multipart
