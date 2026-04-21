@@ -1,6 +1,6 @@
 import os 
 from celery import Celery
-from app.rag.processor import extract_and_chunk_pdf
+from app.rag.processor import extract_and_chunk_pdf , embed_and_store
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
 
@@ -18,8 +18,9 @@ def process_pdf_task(file_name: str):
         # Read and chunk the PDF
         chunks = extract_and_chunk_pdf(file_name)
         
-        # in next phase we weill qdrant emmbadin code here !!
-
+        # embed the chunks and store in Qdrant
+        embed_and_store(chunks)
+        
         print(f"--- COMPLETED AI TASK: Processed {file_name} ---")
         return {
             "status": "success",

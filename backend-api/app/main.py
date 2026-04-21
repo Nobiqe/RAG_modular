@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
     yield
     print("--- Server Shutting Down ---")
 
-app = FastAPI(title="Enhanced RAG API", version="0.1.1", lifespan=lifespan)
+app = FastAPI(title="Enhanced RAG API", version="0.1.3", lifespan=lifespan)
 
 @app.get("/")
 async def read_root(): 
