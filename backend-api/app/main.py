@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from  app.worker import process_pdf_task
-app = FastAPI(title="Enhanced RAG API", version="1.0.0")
+app = FastAPI(title="Enhanced RAG API", version="0.1.0")
 
 @app.get("/")
 async def read_root(): 
