@@ -1,6 +1,17 @@
 from fastapi import FastAPI
+from fastapi.concurrency import asynccontextmanager
 from  app.worker import process_pdf_task
-app = FastAPI(title="Enhanced RAG API", version="0.1.0")
+from app.core.vector_db import init_db
+
+# The lifespan context manager runs code before the server starts accepting requests
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("--- Server Starting Up: Initializing Database ---")
+    init_db()
+    yield
+    print("--- Server Shutting Down ---")
+
+app = FastAPI(title="Enhanced RAG API", version="0.1.1")
 
 @app.get("/")
 async def read_root(): 
