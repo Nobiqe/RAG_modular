@@ -1,10 +1,14 @@
 import os 
 from langchain_openai  import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import MessagesPlaceholder
 
-def generate_answer(question: str,context: list) -> str:
+def generate_answer(question: str,context: list, chat_history: None) -> str:
     print("Initializing Llama 3 via OpenRouter...")
     #We use the OpenAI package but point it at OpenRouter!
+    if chat_history is None:
+        chat_history = []
+
     llm = ChatOpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv("OPENROUTER_API_KEY"),
@@ -21,12 +25,13 @@ def generate_answer(question: str,context: list) -> str:
         
         Context:
         {context}"""),
+        MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{question}")
     ])
 
     chain = prompt | llm
     print("Generating answer...")
-    response = chain.invoke({"context": context_text, "question": question})
+    response = chain.invoke({"context": context_text, "question": question, "chat_history": chat_history})
     
     return response.content
 
