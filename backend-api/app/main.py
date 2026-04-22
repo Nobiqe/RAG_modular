@@ -1,10 +1,11 @@
 import os
 import shutil
+from typing import List # <--- NEW IMPORT
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
-from app.worker import process_pdf_task
+from app.worker import process_document_task # <--- UPDATED IMPORT NAME
 from app.core.vector_db import init_db
 from app.rag.retriever import search_documents
 from app.rag.generator import generate_answer
@@ -14,39 +15,50 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("--- Server Starting Up: Initializing Database ---")
     init_db()
     yield
-    print("--- Server Shutting Down ---")
 
-# Bumped version to 0.2.0 because we are adding a major new feature!
-app = FastAPI(title="Enhanced RAG API", version="1.3.0", lifespan=lifespan)
+app = FastAPI(title="Enhanced RAG API", version="1.4.0", lifespan=lifespan)
 
-# Define what the incoming search request should look like
 class SearchQuery(BaseModel):
     question: str
 
 @app.get("/")
 async def read_root(): 
-    return {"status": "success", "message": "Welcome to the Enhanced RAG API!"}
+    return {"status": "success", "message": "Welcome to the Universal RAG API!"}
 
+# NEW: The Multi-File Upload Endpoint
 @app.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+async def upload_documents(files: List[UploadFile] = File(...)):
+    tasks = []
+    saved_files = []
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    for file in files:
+        ext = file.filename.split('.')[-1].lower()
+        if ext not in ['pdf', 'txt', 'docx', 'csv']:
+            continue # Skip unsupported files gracefully
+            
+        file_path = os.path.join(UPLOAD_DIR, file.filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    task = process_pdf_task.delay(file_path)
+        # Launch a background worker for THIS specific file
+        task = process_document_task.delay(file_path, file.filename)
+        
+        tasks.append(task.id)
+        saved_files.append(file.filename)
     
+    if not saved_files:
+        raise HTTPException(status_code=400, detail="No supported files were uploaded.")
+
     return {
-        "message": "File received and saved. Processing in the background!",
-        "filename": file.filename,
-        "task_id": task.id
+        "message": f"Successfully received {len(saved_files)} files. Processing in the background!",
+        "files": saved_files,
+        "task_ids": tasks
     }
+
+# Keep your @app.post("/search") exactly the same!
 
 # NEW: The search endpoint
 @app.post("/search")
