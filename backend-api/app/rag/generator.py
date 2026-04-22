@@ -19,15 +19,18 @@ def generate_answer(question: str,context: list, chat_history: None) -> str:
     context_text = "\n\n".join([chunk["text"] for chunk in context])
     # Create the strict instructions for the AI
     prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are a highly intelligent AI assistant. 
-        Answer the user's question ONLY using the provided Context. 
-        If the answer is not in the Context, say 'I cannot answer this based on the provided document.'
-        
-        Context:
-        {context}"""),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{question}")
-    ])
+            ("system", """You are a highly intelligent and friendly AI assistant. 
+            You have access to a document's Context and the user's Chat History.
+            
+            Rules:
+            1. If the user asks a question about the document, answer it using ONLY the provided Context.
+            2. If the user is just chatting normally or referring to past messages (like their favorite color), use the Chat History to answer them conversationally.
+            
+            Context:
+            {context}"""),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{question}")
+        ])
 
     chain = prompt | llm
     print("Generating answer...")

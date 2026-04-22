@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     print("--- Server Shutting Down ---")
 
 # Bumped version to 0.2.0 because we are adding a major new feature!
-app = FastAPI(title="Enhanced RAG API", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="Enhanced RAG API", version="1.3.0", lifespan=lifespan)
 
 # Define what the incoming search request should look like
 class SearchQuery(BaseModel):
