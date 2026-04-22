@@ -12,3 +12,4 @@ python-multipart
 langchain-openai
 discord.py
 docx2txt
+sentence-transformers
