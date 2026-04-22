@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app.worker import process_pdf_task
 from app.core.vector_db import init_db
 from app.rag.retriever import search_documents
+from app.rag.generator import generate_answer
 
 UPLOAD_DIR = "/code/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -51,7 +52,16 @@ async def upload_document(file: UploadFile = File(...)):
 @app.post("/search")
 def search_knowledge_base(query: SearchQuery):
     results = search_documents(query.question)
+    if not results:
+        return {
+            "question": query.question,
+            "results": [],
+            "answer": "No relevant documents found in the knowledge base."
+        }
+    answer = generate_answer(query.question, results)
+
     return {
         "question": query.question,
-        "results": results
+        "answer": answer,
+        "sources": results
     }

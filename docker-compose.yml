@@ -13,6 +13,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://vector_db:6333
       - PYTHONUNBUFFERED=1
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}  
     depends_on:
       - redis
       - vector_db
