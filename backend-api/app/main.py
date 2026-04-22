@@ -2,10 +2,12 @@ import os
 import shutil
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from pydantic import BaseModel
+
 from app.worker import process_pdf_task
 from app.core.vector_db import init_db
+from app.rag.retriever import search_documents
 
-# Ensure the shared uploads folder exists when the server starts
 UPLOAD_DIR = "/code/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -16,13 +18,17 @@ async def lifespan(app: FastAPI):
     yield
     print("--- Server Shutting Down ---")
 
-app = FastAPI(title="Enhanced RAG API", version="0.1.3", lifespan=lifespan)
+# Bumped version to 0.2.0 because we are adding a major new feature!
+app = FastAPI(title="Enhanced RAG API", version="0.2.0", lifespan=lifespan)
+
+# Define what the incoming search request should look like
+class SearchQuery(BaseModel):
+    question: str
 
 @app.get("/")
 async def read_root(): 
     return {"status": "success", "message": "Welcome to the Enhanced RAG API!"}
 
-# NEW: We use UploadFile to accept real binary files
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
     if not file.filename.endswith(".pdf"):
@@ -30,15 +36,22 @@ async def upload_document(file: UploadFile = File(...)):
 
     file_path = os.path.join(UPLOAD_DIR, file.filename)
     
-    # Save the file to the shared folder
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Tell the worker exactly where the file is located
     task = process_pdf_task.delay(file_path)
     
     return {
         "message": "File received and saved. Processing in the background!",
         "filename": file.filename,
         "task_id": task.id
+    }
+
+# NEW: The search endpoint
+@app.post("/search")
+def search_knowledge_base(query: SearchQuery):
+    results = search_documents(query.question)
+    return {
+        "question": query.question,
+        "results": results
     }

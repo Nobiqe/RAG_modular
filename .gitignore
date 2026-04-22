@@ -1,6 +1,16 @@
-#venv
+# Virtual Environments
 .venv/
+env/
 
-#docker
-.dockerignore
-/backend-api/Dockerfile
+# Python Cache
+/backend-api/app/__pycache__
+/backend-api/app/core/__pycache__
+/backend-api/app/*.pyc
+/backend-api/app/core/*.pyc
+
+
+# Environment Variables (Secrets)
+.env
+
+# User Uploads (We don't want to push test PDFs to GitHub!)
+backend-api/uploads/
