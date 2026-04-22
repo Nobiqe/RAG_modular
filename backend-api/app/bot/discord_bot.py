@@ -68,7 +68,19 @@ async def on_message(message):
         redis_client.set(redis_key, json.dumps(memory_data))
         
         # 3. Edit the temporary message
-        await status_message.edit(content=f"**Question:** {question}\n**Answer:** {answer}")
+        # 3. Handle Discord's character limit by splitting long answers
+        full_response = f"**Question:** {question}\n**Answer:** {answer}"
+        
+        if len(full_response) <= 2000:
+            # If it's short enough, just edit the status message
+            await status_message.edit(content=full_response)
+        else:
+            # If it's too long, edit the first message with the first 2000 characters
+            await status_message.edit(content=full_response[:2000])
+            
+            # Loop through the rest of the text and send follow-up messages
+            for i in range(2000, len(full_response), 2000):
+                await message.channel.send(content=full_response[i:i+2000])
             
     except Exception as e:
         print(f"Error during AI processing: {e}")
