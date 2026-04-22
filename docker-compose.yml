@@ -54,6 +54,21 @@ services:
     command: celery -A app.worker:celery_app worker --loglevel=info
     restart: unless-stopped
 
+# 5. Discord Bot (Listens for messages)
+  discord_bot:
+    build:
+      context: ./backend-api
+    volumes:
+      - ./backend-api/app:/code/app
+    environment:
+      - QDRANT_URL=http://vector_db:6333
+      - PYTHONUNBUFFERED=1
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+    depends_on:
+      - vector_db
+    command: python -m app.bot.discord_bot
+    restart: unless-stopped
 # 5. Named volume for persistence
 volumes:
   qdrant_data:
