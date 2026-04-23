@@ -7,7 +7,7 @@ from sentence_transformers import CrossEncoder
 QDRANT_URL = os.getenv("QDRANT_URL", "http://vector_db:6333")
 COLLECTION_NAME = "documents_collection"
 
-def search_documents(query: str, broad_limit: int = 15, final_limit: int = 3):
+def search_documents(query: str, broad_limit: int = 5, final_limit: int = 2):
     print(f"Searching Multi-Lingual Hybrid database for: '{query}'")
     client = QdrantClient(url=QDRANT_URL)
     

@@ -7,6 +7,7 @@ import redis
 from app.rag.retriever import search_documents
 from app.rag.generator import generate_answer
 from langchain_core.messages import AIMessage, HumanMessage
+from app.rag.router import route_question
 
 # Connect to Redis database 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -33,55 +34,63 @@ async def on_message(message):
     status_message = await message.channel.send("⏳ *Searching the database and thinking...*")
         
     try:
-        # 1. Retrieve the data
-        results = await asyncio.to_thread(search_documents, question)
-            
-        # -- MEMORY LOGIC --
-        user_id = str(message.author.id)
-        redis_key = f"memory:{user_id}"
+            # -- MEMORY LOGIC --
+            user_id = str(message.author.id)
+            redis_key = f"memory:{user_id}"
 
-        # Pull the existing memory for this user
-        raw_memory = redis_client.get(redis_key)
-        if raw_memory:
-            memory_data = json.loads(raw_memory)
-        else:
-            memory_data = []
-
-        history = []
-        for item in memory_data:
-            if item["role"] == "human":
-                history.append(HumanMessage(content=item["content"]))
+            raw_memory = redis_client.get(redis_key)
+            if raw_memory:
+                memory_data = json.loads(raw_memory)
             else:
-                history.append(AIMessage(content=item["content"]))
+                memory_data = []
+
+            history = []
+            for item in memory_data:
+                if item["role"] == "human":
+                    history.append(HumanMessage(content=item["content"]))
+                else:
+                    history.append(AIMessage(content=item["content"]))
+                    
+            # --- THE AGENTIC ROUTER ---
+            category = await asyncio.to_thread(route_question, question)
+            print(f"🚦 Agent Router decided: {category}")
+            
+            results = []
+            if category == 'chat':
+                await status_message.edit(content="💬 *Chatting...*")
+                # We skip the database entirely! 'results' stays empty.
                 
-        # 2. Generate the answer
-        answer = await asyncio.to_thread(generate_answer, question, results, history)
+            elif category == 'web':
+                # We will build the Web Search tool in the next phase!
+                await status_message.edit(content="🌐 *I need to search the web for this (Tool coming soon!)*")
+                return 
+                
+            else: # category == 'rag'
+                await status_message.edit(content="📚 *Searching the knowledge base...*")
+                # 1. Retrieve the data (Heavy lifting)
+                results = await asyncio.to_thread(search_documents, question)
+                if not results:
+                    await status_message.edit(content="No relevant documents found in the database.")
+                    return
 
-        # Update JSON list with the new question and answer
-        memory_data.append({"role": "human", "content": question})
-        memory_data.append({"role": "ai", "content": answer})
+            # 2. Generate the answer (Passes empty results if it's just 'chat')
+            answer = await asyncio.to_thread(generate_answer, question, results, history)
 
-        # FIXED: Slice the list directly to keep the last 6 messages
-        memory_data = memory_data[-6:]      
-
-        # Save to Redis
-        redis_client.set(redis_key, json.dumps(memory_data))
-        
-        # 3. Edit the temporary message
-        # 3. Handle Discord's character limit by splitting long answers
-        full_response = f"**Question:** {question}\n**Answer:** {answer}"
-        
-        if len(full_response) <= 2000:
-            # If it's short enough, just edit the status message
-            await status_message.edit(content=full_response)
-        else:
-            # If it's too long, edit the first message with the first 2000 characters
-            await status_message.edit(content=full_response[:2000])
+            # Update JSON list
+            memory_data.append({"role": "human", "content": question})
+            memory_data.append({"role": "ai", "content": answer})
+            memory_data = memory_data[-6:]      
+            redis_client.set(redis_key, json.dumps(memory_data))
             
-            # Loop through the rest of the text and send follow-up messages
-            for i in range(2000, len(full_response), 2000):
-                await message.channel.send(content=full_response[i:i+2000])
-            
+            # 3. Handle Discord's character limit by splitting long answers
+            full_response = f"**Question:** {question}\n**Answer:** {answer}"
+            if len(full_response) <= 2000:
+                await status_message.edit(content=full_response)
+            else:
+                await status_message.edit(content=full_response[:2000])
+                for i in range(2000, len(full_response), 2000):
+                    await message.channel.send(content=full_response[i:i+2000])
+                
     except Exception as e:
         print(f"Error during AI processing: {e}")
         await status_message.edit(content="❌ *Sorry, my AI brain encountered an error.*")

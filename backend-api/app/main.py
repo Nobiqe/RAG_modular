@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-from app.worker import process_document_task # <--- UPDATED IMPORT NAME
+from app.worker import process_document_task 
 from app.core.vector_db import init_db
 from app.rag.retriever import search_documents
 from app.rag.generator import generate_answer
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     init_db()
     yield
 
-app = FastAPI(title="Enhanced RAG API", version="1.8.0", lifespan=lifespan)
+app = FastAPI(title="Enhanced RAG API", version="1.9.0", lifespan=lifespan)
 
 class SearchQuery(BaseModel):
     question: str
