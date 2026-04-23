@@ -51,7 +51,8 @@ services:
     depends_on:
       - redis
       - vector_db
-    command: celery -A app.worker:celery_app worker --loglevel=info
+    # ADD --concurrency=1 TO THE END OF THIS LINE
+    command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=1
     restart: unless-stopped
 
 # 5. Discord Bot (Listens for messages)

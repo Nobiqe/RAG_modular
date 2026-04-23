@@ -4,15 +4,14 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2t
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
-from fastembed import TextEmbedding
+from fastembed import TextEmbedding, SparseTextEmbedding # <--- NEW IMPORT
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://vector_db:6333")
 COLLECTION_NAME = "documents_collection"
 
 def extract_and_chunk_file(file_path: str, filename: str):
+    # ... (Keep this exact function the same as before) ...
     print(f"Reading file: {filename}")
-    
-    # The Omni-Loader Logic
     ext = filename.split('.')[-1].lower()
     if ext == 'pdf':
         loader = PyPDFLoader(file_path)
@@ -26,41 +25,52 @@ def extract_and_chunk_file(file_path: str, filename: str):
         raise ValueError(f"Unsupported file type: {ext}")
     
     documents = loader.load()
-    
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_documents(documents)
-    print(f"Extracted and chunked {len(chunks)} chunks from {filename}.")
-    
     return chunks
 
 def embed_and_store(chunks, filename: str):
-    print(f"Connecting to Qdrant to store {len(chunks)} chunks for {filename}...")
+    print(f"Connecting to Qdrant to store {len(chunks)} hybrid chunks for {filename}...")
     client = QdrantClient(url=QDRANT_URL)
-    embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+    
+    # 1. Load BOTH AI Models
+    print("Loading Dense and Sparse Models...")
+    dense_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+    sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
     
     documents = [chunk.page_content for chunk in chunks]
     
-    # Injecting Metadata: Now the AI knows exactly which file this came from!
     metadata = [
-        {
-            "source_file": filename, 
-            "page": chunk.metadata.get("page", 0),
-            "text": chunk.page_content  
-        } 
+        {"source_file": filename, "page": chunk.metadata.get("page", 0), "text": chunk.page_content} 
         for chunk in chunks
     ]
     
-    embeddings = list(embedding_model.embed(documents))
+    # 2. Generate BOTH Vectors
+    print("Generating mathematical vectors (Dense)...")
+    dense_embeddings = list(dense_model.embed(documents))
     
+    print("Generating keyword vectors (Sparse/BM25)...")
+    sparse_embeddings = list(sparse_model.embed(documents))
+    
+    # 3. Structure the multi-vector data points
+    print("Structuring data points...")
     points = []
-    for i, embedding in enumerate(embeddings):
+    for i in range(len(chunks)):
         points.append(
             PointStruct(
                 id=str(uuid.uuid4()),
-                vector=embedding.tolist(),
+                # Package both vectors under the names we defined in vector_db.py
+                vector={
+                    "dense": dense_embeddings[i].tolist(),
+                    # FastEmbed outputs a specific object for sparse, we convert it to a dictionary
+                    "sparse": {
+                        "indices": sparse_embeddings[i].indices.tolist(),
+                        "values": sparse_embeddings[i].values.tolist()
+                    }
+                },
                 payload=metadata[i]
             )
         )
     
     client.upsert(collection_name=COLLECTION_NAME, points=points)
-    print(f"Successfully embedded and stored {filename} in Qdrant!")
+    print(f"Successfully embedded and stored {filename} in Hybrid Qdrant!")
