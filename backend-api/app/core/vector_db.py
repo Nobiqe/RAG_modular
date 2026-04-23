@@ -27,6 +27,12 @@ def init_db():
                 )
             }
         )
+        client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="metadata",
+            field_schema=models.PayloadSchemaType.KEYWORD
+        )
+        
         print("Database initialized successfully!")
     else:
         print("Database already exists. Ready to go!")
