@@ -7,28 +7,21 @@ from sentence_transformers import CrossEncoder
 QDRANT_URL = os.getenv("QDRANT_URL", "http://vector_db:6333")
 COLLECTION_NAME = "documents_collection"
 
-def search_documents(query: str, broad_limit: int = 10, final_limit: int = 3):
-    print(f"Searching Hybrid database broadly for: '{query}'")
+def search_documents(query: str, broad_limit: int = 15, final_limit: int = 3):
+    print(f"Searching Multi-Lingual Hybrid database for: '{query}'")
     client = QdrantClient(url=QDRANT_URL)
     
-    # 1. Load BOTH AI Models
-    dense_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+    # 1. Load Multi-Lingual Embeddings
+    dense_model = TextEmbedding(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
     sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
     
-    # 2. Embed the Query into BOTH formats
     dense_query_vector = list(dense_model.embed([query]))[0].tolist()
     sparse_query_vector = list(sparse_model.embed([query]))[0]
     
-    # 3. Hybrid Search with Reciprocal Rank Fusion (RRF)
-    # This automatically combines the keyword matches and the semantic meaning matches
     search_response = client.query_points(
         collection_name=COLLECTION_NAME,
         prefetch=[
-            models.Prefetch(
-                query=dense_query_vector,
-                using="dense",
-                limit=broad_limit,
-            ),
+            models.Prefetch(query=dense_query_vector, using="dense", limit=broad_limit),
             models.Prefetch(
                 query=models.SparseVector(
                     indices=sparse_query_vector.indices.tolist(),
@@ -42,14 +35,22 @@ def search_documents(query: str, broad_limit: int = 10, final_limit: int = 3):
         limit=broad_limit
     )
     
-    candidate_payloads = [hit.payload for hit in search_response.points]
+    # 2. DEDUPLICATION LOGIC
+    # We only want to keep unique parent paragraphs so we don't waste the AI's time
+    unique_parents = {}
+    for hit in search_response.points:
+        p_id = hit.payload.get("parent_id")
+        if p_id not in unique_parents:
+            unique_parents[p_id] = hit.payload
+            
+    candidate_payloads = list(unique_parents.values())
     
     if not candidate_payloads:
         return []
         
-    # 4. The Teacher: Load the Cross-Encoder AI
-    print(f"Re-ranking {len(candidate_payloads)} candidates...")
-    reranker_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    # 3. The Multi-Lingual Teacher
+    print(f"Re-ranking {len(candidate_payloads)} UNIQUE parent candidates...")
+    reranker_model = CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1')
     
     pairs = [[query, payload.get("text")] for payload in candidate_payloads]
     scores = reranker_model.predict(pairs)
@@ -57,10 +58,10 @@ def search_documents(query: str, broad_limit: int = 10, final_limit: int = 3):
     scored_results = zip(scores, candidate_payloads)
     sorted_results = sorted(scored_results, key=lambda x: x[0], reverse=True)
     
-    top_5 = sorted_results[:final_limit]
+    top_results = sorted_results[:final_limit]
     
     results = []
-    for score, payload in top_5:
+    for score, payload in top_results:
         results.append({
             "relevance_score": round(float(score), 4),
             "text": payload.get("text"),
