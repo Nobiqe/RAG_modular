@@ -4,14 +4,17 @@ from qdrant_client.http import models
 from fastembed import TextEmbedding, SparseTextEmbedding
 from sentence_transformers import CrossEncoder
 
+# --- NEW: Import the rewriter ---
+from app.rag.rewriter import rewrite_query 
+
 QDRANT_URL = os.getenv("QDRANT_URL", "http://vector_db:6333")
 COLLECTION_NAME = "documents_collection"
 
-def search_documents(query: str, broad_limit: int = 5, final_limit: int = 2):
+# Notice the new 'is_retry' flag. This prevents the bot from looping infinitely!
+def search_documents(query: str, broad_limit: int = 5, final_limit: int = 2, is_retry: bool = False):
     print(f"Searching Multi-Lingual Hybrid database for: '{query}'")
     client = QdrantClient(url=QDRANT_URL)
     
-    # 1. Load Multi-Lingual Embeddings
     dense_model = TextEmbedding(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
     sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
     
@@ -35,8 +38,6 @@ def search_documents(query: str, broad_limit: int = 5, final_limit: int = 2):
         limit=broad_limit
     )
     
-    # 2. DEDUPLICATION LOGIC
-    # We only want to keep unique parent paragraphs so we don't waste the AI's time
     unique_parents = {}
     for hit in search_response.points:
         p_id = hit.payload.get("parent_id")
@@ -45,10 +46,14 @@ def search_documents(query: str, broad_limit: int = 5, final_limit: int = 2):
             
     candidate_payloads = list(unique_parents.values())
     
+    # What if the database returns literally nothing?
     if not candidate_payloads:
+        if not is_retry:
+            print("⚠️ No results found at all! Triggering Corrective RAG Fallback...")
+            new_query = rewrite_query(query)
+            return search_documents(new_query, broad_limit, final_limit, is_retry=True)
         return []
         
-    # 3. The Multi-Lingual Teacher
     print(f"Re-ranking {len(candidate_payloads)} UNIQUE parent candidates...")
     reranker_model = CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1')
     
@@ -57,6 +62,17 @@ def search_documents(query: str, broad_limit: int = 5, final_limit: int = 2):
     
     scored_results = zip(scores, candidate_payloads)
     sorted_results = sorted(scored_results, key=lambda x: x[0], reverse=True)
+    
+    # --- CORRECTIVE RAG LOGIC ---
+    top_score = sorted_results[0][0]
+    print(f"Teacher AI gave the best paragraph a score of: {top_score:.4f}")
+    
+    # If the score is below 0, the paragraph doesn't answer the question
+    if top_score < 0.0 and not is_retry:
+        print("⚠️ Teacher AI rejected the results! Triggering Corrective RAG Fallback...")
+        new_query = rewrite_query(query)
+        # We recursively call this exact function with the new question!
+        return search_documents(new_query, broad_limit, final_limit, is_retry=True)
     
     top_results = sorted_results[:final_limit]
     

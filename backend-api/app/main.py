@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     init_db()
     yield
 
-app = FastAPI(title="Enhanced RAG API", version="1.9.0", lifespan=lifespan)
+app = FastAPI(title="Enhanced RAG API", version="1.10.0", lifespan=lifespan)
 
 class SearchQuery(BaseModel):
     question: str
