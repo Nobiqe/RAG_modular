@@ -13,3 +13,6 @@ langchain-openai
 discord.py
 docx2txt
 sentence-transformers
+easyocr
+pdf2image
+opencv-python-headless

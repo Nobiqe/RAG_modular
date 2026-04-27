@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     init_db()
     yield
 
-app = FastAPI(title="Agentic RAG API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="Agentic RAG API", version="2.1.0", lifespan=lifespan)
 
 # --- Define the new Chat Request Schema ---
 class ChatRequest(BaseModel):
@@ -51,15 +51,15 @@ async def upload_documents(files: List[UploadFile] = File(...)):
     
     for file in files:
         ext = file.filename.split('.')[-1].lower()
-        if ext not in ['pdf', 'txt', 'docx', 'csv']:
-            continue # Skip unsupported files gracefully
+        # --- ADD PNG, JPG, and JPEG HERE ---
+        if ext not in ['pdf', 'txt', 'docx', 'csv', 'png', 'jpg', 'jpeg']:
+            continue 
             
         file_path = os.path.join(UPLOAD_DIR, file.filename)
         
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Launch a background worker for THIS specific file
         task = process_document_task.delay(file_path, file.filename)
         
         tasks.append(task.id)
@@ -73,7 +73,6 @@ async def upload_documents(files: List[UploadFile] = File(...)):
         "files": saved_files,
         "task_ids": tasks
     }
-
 # NEW: The search endpoint
 @app.post("/search")
 def search_knowledge_base(query: SearchQuery):
@@ -181,3 +180,13 @@ async def chat_with_agent(request: ChatRequest):
         "route_taken": category,
         "answer": answer
     }    
+
+@app.get("/stats")
+async def get_stats():
+    client = QdrantClient(url=os.getenv("QDRANT_URL"))
+    collection_info = client.get_collection(collection_name="documents_collection")
+    return {
+        "total_vectors": collection_info.points_count,
+        "status": collection_info.status,
+        "indexed_files": list(set([p.payload.get("source_file") for p in client.scroll(collection_name="documents_collection", limit=100)[0]]))
+    }

@@ -7,7 +7,7 @@ def route_question(question: str) -> str:
     llm = ChatOpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
-        model="meta-llama/llama-3-8b-instruct" 
+        model=os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3-8b-instruct") # Defaults to Llama 3 if not found
     )
     
     prompt = ChatPromptTemplate.from_messages([

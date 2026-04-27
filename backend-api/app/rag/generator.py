@@ -12,7 +12,7 @@ def generate_answer(question: str,context: list, chat_history: None) -> str:
     llm = ChatOpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv("OPENROUTER_API_KEY"),
-            model="nvidia/nemotron-nano-9b-v2:free", 
+            model=os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3-8b-instruct") # Defaults to Llama 3 if not found 
         )
     
     # combine the retrived paraghraphs into a single string and create a prompt for the LLM

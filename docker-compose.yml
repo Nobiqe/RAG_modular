@@ -48,13 +48,13 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://vector_db:6333
       - PYTHONUNBUFFERED=1
+      # --- ADD YOUR API KEY HERE ---
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY} 
     depends_on:
       - redis
       - vector_db
-    # ADD --concurrency=1 TO THE END OF THIS LINE
     command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=1
     restart: unless-stopped
-
 # 5. Named volume for persistence
 volumes:
   qdrant_data:
